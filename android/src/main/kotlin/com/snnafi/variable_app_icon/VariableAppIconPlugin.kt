@@ -21,49 +21,52 @@ import io.flutter.plugin.common.MethodChannel.Result
 /** VariableAppIconPlugin */
 class VariableAppIconPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private var activity: FlutterActivity? = null
-    private var binaryMessenger: BinaryMessenger? = null
-
-    /// The MethodChannel that will the communication between Flutter and native Android
-    ///
-    /// This local reference serves to register the plugin with the Flutter Engine and unregister it
-    /// when the Flutter Engine is detached from the Activity
     private lateinit var channel: MethodChannel
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        binaryMessenger = flutterPluginBinding.binaryMessenger
+        channel = MethodChannel(flutterPluginBinding.binaryMessenger, "variable_app_icon")
+        channel.setMethodCallHandler(this)
     }
 
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         if (call.method == "changeAppIcon") {
             var iconId: String = call.argument<String>("androidIconId")!!
             val iconIds: List<String> = call.argument<List<String>>("androidIcons")!!
-            val ctx: Context = activity!!.applicationContext
-            val pm: PackageManager = ctx.getPackageManager()
+            val ctx: Context = activity?.applicationContext ?: return result.error("NO_ACTIVITY", "Activity not attached", null)
+            val pm: PackageManager = ctx.packageManager
             for (i in iconIds) {
                 pm.setComponentEnabledSetting(
-                    ComponentName(ctx.getPackageName(), i),
+                    ComponentName(ctx.packageName, i),
                     if (i == iconId) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP
                 )
             }
+            result.success(null)
         } else {
             result.notImplemented()
         }
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
-        this.activity = binding.activity as FlutterActivity
-        channel = MethodChannel(binaryMessenger!!, "variable_app_icon")
-        channel.setMethodCallHandler(this)
+        this.activity = binding.activity as? FlutterActivity
+        // MethodChannel is already initialized in onAttachedToEngine.
     }
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
     }
 
-    override fun onDetachedFromActivityForConfigChanges() {}
+    override fun onDetachedFromActivity() {
+        // Clean up references to prevent memory leaks.
+        activity = null
+    }
 
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
+    override fun onDetachedFromActivityForConfigChanges() {
+        // Clean up references to prevent memory leaks.
+        activity = null
+    }
 
-    override fun onDetachedFromActivity() {}
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        this.activity = binding.activity as? FlutterActivity
+    }
 }
